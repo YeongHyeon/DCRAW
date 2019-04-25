@@ -3,6 +3,7 @@ import argparse
 import tensorflow as tf
 
 import source.neuralnet as nn
+# import source.neuralnet_attetionfix as nn
 import source.datamanager as dman
 import source.tf_process as tfp
 

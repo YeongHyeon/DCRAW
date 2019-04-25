@@ -29,7 +29,7 @@ def make_canvas(images, size):
 
 def save_result_noseq(c_seq, height, width, canvas_size, step, savedir="recon"):
 
-    c_seq = 1.0/(1.0+np.exp(-np.array(c_seq)))
+    # c_seq = 1.0/(1.0+np.exp(-np.array(c_seq)))
 
     tmp_sequence = np.reshape(c_seq, [-1, height, width])
     canvas = make_canvas(tmp_sequence, [canvas_size, canvas_size])
@@ -121,22 +121,8 @@ def training(sess, neuralnet, saver, dataset, epochs, batch_size, canvas_size, s
             x_tr, _ = dataset.next_train(canvas_size**2)
             x_te, _ = dataset.next_test(canvas_size**2)
 
-            # c_seq_tr, loss_recon_tr, loss_kl_tr = sess.run([neuralnet.c, neuralnet.loss_recon, neuralnet.loss_kl], feed_dict={neuralnet.x:x_tr})
-            # c_seq_te, loss_recon_te, loss_kl_te = sess.run([neuralnet.c, neuralnet.loss_recon, neuralnet.loss_kl], feed_dict={neuralnet.x:x_te})
-            #
-            # list_recon_tr.append(loss_recon_tr)
-            # list_recon_te.append(loss_recon_te)
-            # list_kl_tr.append(loss_kl_tr)
-            # list_kl_te.append(loss_kl_te)
-            #
-            # print("Epoch %06d (%d iteration)\nTR Loss - Recon: %.5f  KL: %.5f" % (epoch, iterations*epoch, loss_recon_tr, loss_kl_tr))
-            # print("TE Loss - Recon: %.5f  KL: %.5f" % (loss_recon_te, loss_kl_te))
-            #
-            # save_result(c_seq=c_seq_tr, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=epoch, savedir="recon_tr")
-            # save_result(c_seq=c_seq_te, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=epoch, savedir="recon_te")
-
-            c_seq_tr, loss_recon_tr, loss_kl_tr = sess.run([neuralnet.deconv_2, neuralnet.loss_recon, neuralnet.loss_kl], feed_dict={neuralnet.x:x_tr})
-            c_seq_te, loss_recon_te, loss_kl_te = sess.run([neuralnet.deconv_2, neuralnet.loss_recon, neuralnet.loss_kl], feed_dict={neuralnet.x:x_te})
+            c_seq_tr, loss_recon_tr, loss_kl_tr = sess.run([neuralnet.recon, neuralnet.loss_recon, neuralnet.loss_kl], feed_dict={neuralnet.x:x_tr})
+            c_seq_te, loss_recon_te, loss_kl_te = sess.run([neuralnet.recon, neuralnet.loss_recon, neuralnet.loss_kl], feed_dict={neuralnet.x:x_te})
 
             list_recon_tr.append(loss_recon_tr)
             list_recon_te.append(loss_recon_te)
@@ -147,8 +133,8 @@ def training(sess, neuralnet, saver, dataset, epochs, batch_size, canvas_size, s
             print("TE Loss - Recon: %.5f  KL: %.5f" % (loss_recon_te, loss_kl_te))
 
             save_result_noseq(c_seq=x_tr, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=epoch, savedir="recon_tr_gt")
-            save_result_noseq(c_seq=c_seq_tr, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=epoch, savedir="recon_tr")
-            save_result_noseq(c_seq=c_seq_te, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=epoch, savedir="recon_te")
+            save_result(c_seq=c_seq_tr, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=epoch, savedir="recon_tr")
+            save_result(c_seq=c_seq_te, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=epoch, savedir="recon_te")
 
         for iteration in range(iterations):
             x_tr, _ = dataset.next_train(batch_size)
