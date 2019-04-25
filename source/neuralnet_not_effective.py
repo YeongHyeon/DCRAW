@@ -11,43 +11,42 @@ class DRAW(object):
         self.sequence_length, self.learning_rate = sequence_length, learning_rate
 
         self.attention_n = 3
+        self.n_hidden = 256
         self.n_z = 10
         self.share_parameters = False
 
         self.feature = [32, 64]
 
         self.c = [0] * self.sequence_length
+        self.recon = [0] * self.sequence_length
 
         self.mu, self.sigma = [0] * self.sequence_length, [0] * self.sequence_length
 
         self.x = tf.placeholder(tf.float32, [None, self.height*self.width]) # input (batch_size * img_size)
-        self.x_img = tf.reshape(self.x, [-1, self.height, self.width, self.channel])
+        self.z_noise = tf.random_normal((tf.shape(self.x)[0], self.n_z), mean=0, stddev=1) # Qsampler noise
 
-        self.enconv_1, self.enc1_h, self.enc1_w, self.enc1_c, self.enc1_hwc = self.conv2d(inputs=self.x_img, num_inputs=self.channel, num_outputs=self.feature[0], kernel_size=3, stride=2, padding='SAME', activation='sigmoid')
-        self.enconv_2, self.enc2_h, self.enc2_w, self.enc2_c, self.enc2_hwc = self.conv2d(inputs=self.enconv_1, num_inputs=self.feature[0], num_outputs=self.feature[1], kernel_size=3, stride=2, padding='SAME', activation='sigmoid')
-
-        self.c_shape = self.enc2_hwc
-        self.c_h, self.c_w, self.c_c = self.enc2_h, self.enc2_w, self.enc2_c
-
-        self.conv_enc_flat = tf.reshape(self.enconv_2, [-1, self.c_h*self.c_w])
-
-        self.z_noise = tf.random_normal((tf.shape(self.x)[0]*self.c_c, self.n_z), mean=0, stddev=1) # Qsampler noise
-
-        self.n_hidden = 256
         self.lstm_enc = tf.nn.rnn_cell.LSTMCell(num_units=self.n_hidden, state_is_tuple=True) # encoder Op
         self.lstm_dec = tf.nn.rnn_cell.LSTMCell(num_units=self.n_hidden, state_is_tuple=True) # decoder Op
 
-        self.h_prev_dec = tf.zeros((tf.shape(self.x)[0]*self.c_c, self.n_hidden))
-        self.h_prev_enc = self.lstm_enc.zero_state(tf.shape(self.x)[0]*self.c_c, tf.float32)
-        self.h_dec_state = self.lstm_dec.zero_state(tf.shape(self.x)[0]*self.c_c, tf.float32)
+        self.h_prev_dec = tf.zeros((tf.shape(self.x)[0], self.n_hidden))
+        self.h_prev_enc = self.lstm_enc.zero_state(tf.shape(self.x)[0], tf.float32)
+        self.h_dec_state = self.lstm_dec.zero_state(tf.shape(self.x)[0], tf.float32)
+
+        self.x_img = tf.reshape(self.x, [-1, self.height, self.width, self.channel])
 
         for t in range(self.sequence_length):
+            self.enconv_1, self.enc1_h, self.enc1_w, self.enc1_c, self.enc1_hwc = self.conv2d(inputs=self.x_img, num_inputs=self.channel, num_outputs=self.feature[0], kernel_size=3, stride=2, padding='SAME', activation='sigmoid')
+            self.enconv_2, self.enc2_h, self.enc2_w, self.enc2_c, self.enc2_hwc = self.conv2d(inputs=self.enconv_1, num_inputs=self.feature[0], num_outputs=self.feature[1], kernel_size=3, stride=2, padding='SAME', activation='sigmoid')
+            self.conv_enc_flat = tf.reshape(self.enconv_2, [-1, self.enc2_hwc])
 
             # Equation 3.
             # x_t_hat = x = sigmoid(c_(t-1))
-            if(t==0): c_prev = tf.zeros((tf.shape(self.x)[0]*self.c_c, self.c_h*self.c_w))
-            else: c_prev = self.c[t-1]
-            print(t, self.conv_enc_flat.shape, tf.nn.sigmoid(c_prev).shape)
+            if(t==0):
+                recon_prev = tf.zeros(tf.shape(self.x_img))
+                c_prev = tf.zeros((tf.shape(self.x)[0], self.enc2_hwc))
+            else:
+                recon_prev = self.recon[t-1]
+                c_prev = self.c[t-1]
             x_t_hat = self.conv_enc_flat - tf.nn.sigmoid(c_prev)
 
             # Equation 4.
@@ -74,12 +73,13 @@ class DRAW(object):
             # Replace self.h_prev_dec as h_t_dec
             self.h_prev_dec = h_t_dec
 
+            self.conv_dec_img = tf.reshape(self.c[t], [-1, self.enc2_h, self.enc2_w, self.enc2_c])
+            self.deconv_1 = self.conv2d_transpose(inputs=tf.nn.sigmoid(self.conv_dec_img), num_inputs=self.feature[1], num_outputs=self.feature[0], output_shape=tf.shape(self.enconv_1), kernel_size=3, stride=2, padding='SAME', activation='sigmoid')
+            self.deconv_2 = self.conv2d_transpose(inputs=self.deconv_1, num_inputs=self.feature[0], num_outputs=self.channel, output_shape=tf.shape(self.x_img), kernel_size=3, stride=2, padding='SAME', activation=None)
+
+            self.recon[t] = recon_prev + self.deconv_2
+
             self.share_parameters = True
-
-        self.conv_dec_img = tf.reshape(self.c[t], [-1, self.c_h, self.c_w, self.c_c])
-
-        self.deconv_1 = self.conv2d_transpose(inputs=self.conv_dec_img, num_inputs=self.feature[1], num_outputs=self.feature[0], output_shape=tf.shape(self.enconv_1), kernel_size=3, stride=2, padding='SAME', activation='sigmoid')
-        self.deconv_2 = self.conv2d_transpose(inputs=self.deconv_1, num_inputs=self.feature[0], num_outputs=self.channel, output_shape=tf.shape(self.x_img), kernel_size=3, stride=2, padding='SAME', activation=None)
 
         print("Input", self.x_img.shape)
         print("Conv 1", self.enconv_1.shape)
@@ -95,12 +95,13 @@ class DRAW(object):
         print("Reshape", self.conv_dec_img.shape)
         print("Conv_Tr 1", self.deconv_1.shape)
         print("Conv_Tr 2", self.deconv_2.shape)
+        print("Output", self.recon[-1].shape)
 
         # Equation 9.
         # Reconstruction error: Negative log probability.
         # L^x = -log D(x|c_T)
         # https://www.tensorflow.org/api_docs/python/tf/nn/sigmoid_cross_entropy_with_logits
-        self.loss_recon = tf.reduce_mean(tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.x_img, logits=self.deconv_2), 1))
+        self.loss_recon = tf.reduce_mean(tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.x_img, logits=self.recon[-1]), 1))
 
         # Equation 10 & 11.
         # Regularizer: Kullback-Leibler divergence of latent prior.
@@ -124,12 +125,12 @@ class DRAW(object):
 
     def basic_read(self, inputs, x_hat): return tf.concat([inputs, x_hat], 1)
 
-    def extract_shape(self, inputs): return inputs.shape[1].value, inputs.shape[2].value, inputs.shape[3].value, (inputs.shape[1] * inputs.shape[2] * inputs.shape[3]).value
+    def extract_shape(self, inputs): return inputs.shape[1], inputs.shape[2], inputs.shape[3], (inputs.shape[1] * inputs.shape[2] * inputs.shape[3])
 
     def basic_write(self, hidden_state):
 
         with tf.variable_scope("write", reuse=self.share_parameters):
-            decoded_image_portion = self.fully_connected(hidden_state, self.n_hidden, self.c_h*self.c_w)
+            decoded_image_portion = self.fully_connected(hidden_state, self.n_hidden, self.enc2_hwc)
 
         return decoded_image_portion
 
@@ -149,12 +150,10 @@ class DRAW(object):
         w = tf.reshape(w, [-1, self.attention_n, self.attention_n])
         Fx, Fy, gamma = self.attn_window("write", hidden_state)
         Fyt = tf.transpose(Fy, perm=[0,2,1])
-
         wr = tf.matmul(Fyt, tf.matmul(w, Fx))
-        wr = tf.reshape(wr, [-1, self.c_h*self.c_w])
+        wr = tf.reshape(wr, [-1, self.height*self.width])
 
-        tmpout = wr * tf.reshape(1.0/gamma, [-1, 1])
-        return tf.reshape(tmpout, [-1, self.c_h*self.c_w])
+        return wr * tf.reshape(1.0/gamma, [-1, 1])
 
     def attn_window(self, scope, h_dec):
 
@@ -162,30 +161,28 @@ class DRAW(object):
             params_tmp = self.fully_connected(h_dec, self.n_hidden, 5) # make parameters by fully connencted layer.
 
         gx_, gy_, log_sigma_sq, log_delta_, log_gamma = tf.split(params_tmp, 5, 1)
-        gx = ((self.c_w + 1) / 2) * (gx_ + 1)
-        gy = ((self.c_h + 1) / 2) * (gy_ + 1)
-
+        gx = ((self.width + 1) / 2) * (gx_ + 1)
+        gy = ((self.height + 1) / 2) * (gy_ + 1)
         sigma_sq = tf.exp(log_sigma_sq)
-        delta = ((max(self.c_w, self.c_h) - 1) / (self.attention_n-1)) * tf.exp(log_delta_)
+        delta = ((max(self.width, self.height) - 1) / (self.attention_n-1)) * tf.exp(log_delta_)
 
-        Fx, Fy = self.filterbank(gx, gy, sigma_sq, delta)
+        Fx,Fy = self.filterbank(gx, gy, sigma_sq, delta)
         return Fx, Fy, tf.exp(log_gamma)
 
     def filter_img(self, inputs, Fx, Fy, gamma): # apply parameters for patch of gaussian filters
 
         Fxt = tf.transpose(Fx, perm=[0,2,1])
-        img = tf.reshape(inputs, [-1, self.c_h, self.c_w])
+        img = tf.reshape(inputs, [-1, self.height, self.width])
 
         glimpse = tf.matmul(Fy, tf.matmul(img, Fxt)) # gaussian patches
+        print(glimpse.shape)
         glimpse = tf.reshape(glimpse, [-1, self.attention_n**2])
 
         return glimpse * tf.reshape(gamma, [-1, 1]) # rescale
 
     def filterbank(self, gx, gy, sigma_sq, delta):
 
-        grid_c = tf.ones((tf.shape(self.x)[0]*self.c_c, 1))
         grid_i = tf.reshape(tf.cast(tf.range(self.attention_n), tf.float32), [1, -1])
-        grid_i = tf.matmul(grid_c, grid_i)
 
         # Cordination is moved to (0, 0) by Equation 19 & 20.
         # Equation 19.
@@ -197,17 +194,17 @@ class DRAW(object):
 
         # (i, j) of F is a point in the attention patch.
         # (a, b) is a point in the input image.
-        a = tf.reshape(tf.cast(tf.range(self.c_w), tf.float32), [1, 1, -1])
-        b = tf.reshape(tf.cast(tf.range(self.c_h), tf.float32), [1, 1, -1])
+        a = tf.reshape(tf.cast(tf.range(self.width), tf.float32), [1, 1, -1])
+        b = tf.reshape(tf.cast(tf.range(self.height), tf.float32), [1, 1, -1])
 
         sigma_sq = tf.reshape(sigma_sq, [-1, 1, 1])
 
         # Equation 25.
         Fx = tf.exp(-(tf.square(a - mu_x) / (2*sigma_sq)))
-        Fx = Fx / tf.maximum(tf.reduce_sum(Fx, 2, keep_dims=True),1e-12)
+        Fx = Fx/tf.maximum(tf.reduce_sum(Fx,2,keep_dims=True),1e-12)
         # Equation 26.
         Fy = tf.exp(-(tf.square(b - mu_y) / (2*sigma_sq)))
-        Fy = Fy / tf.maximum(tf.reduce_sum(Fy, 2, keep_dims=True),1e-12)
+        Fy = Fy/tf.maximum(tf.reduce_sum(Fy,2,keep_dims=True),1e-12)
 
         return Fx, Fy
 
@@ -256,6 +253,7 @@ class DRAW(object):
 
             # print(out_bias.shape)
             h, w, c, hwc = self.extract_shape(out_bias)
+            h, w, c, hwc = h.value, w.value, c.value, hwc.value
             if(activation is 'sigmoid'): return tf.nn.sigmoid(out_bias), h, w, c, hwc
             elif(activation is 'tanh'): return tf.nn.tanh(out_bias), h, w, c, hwc
             elif(activation is 'relu'): return tf.nn.relu(out_bias), h, w, c, hwc
