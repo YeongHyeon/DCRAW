@@ -25,7 +25,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch', type=int, default=550, help='Batch size for training.')
     parser.add_argument('--canvas', type=int, default=10, help='Canvas size for generating result.')
     parser.add_argument('--seqlen', type=int, default=10, help='Sequence length of RNN.')
-    parser.add_argument('--lr', type=float, default=0.001, help='Learning rate for optimization.')
+    parser.add_argument('--lr', type=float, default=0.0001, help='Learning rate for optimization.')
     parser.add_argument('--attention', type=bool, default=False, help='Use attention or not.')
 
     FLAGS, unparsed = parser.parse_known_args()

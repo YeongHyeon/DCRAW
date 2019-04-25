@@ -108,6 +108,7 @@ def training(sess, neuralnet, saver, dataset, epochs, batch_size, canvas_size, s
 
     print("\n* Training to %d epochs (%d of minibatch size)" %(epochs, batch_size))
 
+    make_dir(path="recon_tr_gt")
     make_dir(path="recon_tr")
     make_dir(path="recon_te")
 
@@ -145,6 +146,7 @@ def training(sess, neuralnet, saver, dataset, epochs, batch_size, canvas_size, s
             print("Epoch %06d (%d iteration)\nTR Loss - Recon: %.5f  KL: %.5f" % (epoch, iterations*epoch, loss_recon_tr, loss_kl_tr))
             print("TE Loss - Recon: %.5f  KL: %.5f" % (loss_recon_te, loss_kl_te))
 
+            save_result_noseq(c_seq=x_tr, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=epoch, savedir="recon_tr_gt")
             save_result_noseq(c_seq=c_seq_tr, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=epoch, savedir="recon_tr")
             save_result_noseq(c_seq=c_seq_te, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=epoch, savedir="recon_te")
 
@@ -155,6 +157,7 @@ def training(sess, neuralnet, saver, dataset, epochs, batch_size, canvas_size, s
             train_writer.add_summary(summaries, iteration+(epoch*iterations))
 
             loss_recon_tr, loss_kl_tr, _ = sess.run([neuralnet.loss_recon, neuralnet.loss_kl, neuralnet.optimizer], feed_dict={neuralnet.x:x_tr})
+            print("   [%d/%d] TR Loss - Recon: %.5f  KL: %.5f" % (iteration, iterations, loss_recon_tr, loss_kl_tr))
             if(math.isnan(loss_recon_tr) or math.isnan(loss_kl_tr)):
                 not_nan = False
                 break

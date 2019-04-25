@@ -11,7 +11,8 @@ class DRAW(object):
         self.sequence_length, self.learning_rate = sequence_length, learning_rate
 
         self.attention_n = 3
-        self.n_z = 10
+        # self.n_z = 10
+        self.n_z = self.sequence_length
         self.share_parameters = False
 
         self.feature = [32, 64]
@@ -47,7 +48,6 @@ class DRAW(object):
             # x_t_hat = x = sigmoid(c_(t-1))
             if(t==0): c_prev = tf.zeros((tf.shape(self.x)[0]*self.c_c, self.c_h*self.c_w))
             else: c_prev = self.c[t-1]
-            print(t, self.conv_enc_flat.shape, tf.nn.sigmoid(c_prev).shape)
             x_t_hat = self.conv_enc_flat - tf.nn.sigmoid(c_prev)
 
             # Equation 4.
@@ -100,7 +100,10 @@ class DRAW(object):
         # Reconstruction error: Negative log probability.
         # L^x = -log D(x|c_T)
         # https://www.tensorflow.org/api_docs/python/tf/nn/sigmoid_cross_entropy_with_logits
-        self.loss_recon = tf.reduce_mean(tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.x_img, logits=self.deconv_2), 1))
+        # self.loss_recon = tf.reduce_mean(tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.x_img, logits=self.deconv_2), 1))
+        self.recon = tf.nn.sigmoid(self.deconv_2)
+        self.recon = tf.clip_by_value(self.recon, 1e-8, 1 - 1e-8)
+        self.loss_recon = tf.reduce_mean(tf.reduce_sum(self.x_img * tf.log(self.recon) + (1 - self.x_img) * tf.log(1 - self.recon), [1, 2]))
 
         # Equation 10 & 11.
         # Regularizer: Kullback-Leibler divergence of latent prior.
