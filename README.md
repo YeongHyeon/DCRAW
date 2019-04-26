@@ -23,9 +23,9 @@ $ python run.py --help // for confirming the option
 
 ## Architecture
 <div align="center">
-  <img src="./figures/neuralnet.png" width="600">
+  <img src="./figures/neuralnet.png" width="700">
   <p>Whole architecture of the DCRAW.</p></br>
-  <img src="./figures/draw.png" width="300">
+  <img src="./figures/draw.png" width="400">
   <p>Architecture of the DRAW.</p>
 </div>
 
