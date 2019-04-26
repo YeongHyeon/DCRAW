@@ -3,7 +3,6 @@ import argparse
 import tensorflow as tf
 
 import source.neuralnet as nn
-# import source.neuralnet_attetionfix as nn
 import source.datamanager as dman
 import source.tf_process as tfp
 
@@ -23,7 +22,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--epoch', type=int, default=1000, help='Epoch for training')
-    parser.add_argument('--batch', type=int, default=550, help='Batch size for training.')
+    parser.add_argument('--batch', type=int, default=1100, help='Batch size for training.')
     parser.add_argument('--canvas', type=int, default=10, help='Canvas size for generating result.')
     parser.add_argument('--seqlen', type=int, default=10, help='Sequence length of RNN.')
     parser.add_argument('--lr', type=float, default=0.0001, help='Learning rate for optimization.')

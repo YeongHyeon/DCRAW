@@ -10,9 +10,8 @@ class DRAW(object):
         self.height, self.width, self.channel = height, width, channel
         self.sequence_length, self.learning_rate = sequence_length, learning_rate
 
-        self.attention_n = 3
-        # self.n_z = 10
-        self.n_z = self.sequence_length
+        self.attention_n = 5
+        self.n_z = 2
         self.share_parameters = False
 
         self.k_size = 3
@@ -23,7 +22,7 @@ class DRAW(object):
 
         self.mu, self.sigma = [0] * self.sequence_length, [0] * self.sequence_length
 
-        self.x = tf.placeholder(tf.float32, [None, self.height*self.width]) # input (batch_size * img_size)
+        self.x = tf.placeholder(tf.float32, [None, self.height * self.width]) # input (batch_size * img_size)
         self.x_img = tf.reshape(self.x, [-1, self.height, self.width, self.channel])
 
         self.z_noise = tf.random_normal((tf.shape(self.x)[0], self.n_z), mean=0, stddev=1) # Qsampler noise
@@ -38,17 +37,20 @@ class DRAW(object):
 
         for t in range(self.sequence_length):
 
-            self.enconv_1, self.enc1_h, self.enc1_w, self.enc1_c, self.enc1_hwc = self.conv2d(inputs=self.x_img, num_inputs=self.channel, num_outputs=self.feature[0], kernel_size=self.k_size, stride=2, padding='SAME', activation='sigmoid')
+            if(t == 0): prev_input = tf.nn.sigmoid(tf.zeros_like(self.x_img))
+            else: prev_input = self.recon[t-1] # sigmoid activation is already applied
+            tmp_input = self.x_img - prev_input
+            self.enconv_1, self.enc1_h, self.enc1_w, self.enc1_c, self.enc1_hwc = self.conv2d(inputs=tmp_input, num_inputs=self.channel, num_outputs=self.feature[0], kernel_size=self.k_size, stride=2, padding='SAME', activation='sigmoid')
             self.enconv_2, self.enc2_h, self.enc2_w, self.enc2_c, self.enc2_hwc = self.conv2d(inputs=self.enconv_1, num_inputs=self.feature[0], num_outputs=self.feature[1], kernel_size=self.k_size, stride=2, padding='SAME', activation='sigmoid')
 
             self.c_shape = self.enc2_hwc
             self.c_h, self.c_w, self.c_c = self.enc2_h, self.enc2_w, self.enc2_c
 
-            self.conv_enc_flat = tf.reshape(self.enconv_2, [-1, self.c_h * self.c_w * self.c_c])
+            self.conv_enc_flat = tf.reshape(self.enconv_2, [-1, self.c_shape])
 
             # Equation 3.
             # x_t_hat = x = sigmoid(c_(t-1))
-            if(t==0): c_prev = tf.zeros((tf.shape(self.x)[0], self.c_h * self.c_w * self.c_c))
+            if(t == 0): c_prev = tf.zeros((tf.shape(self.x)[0], self.c_shape))
             else: c_prev = self.c[t-1]
             x_t_hat = self.conv_enc_flat - tf.nn.sigmoid(c_prev)
 
@@ -83,6 +85,7 @@ class DRAW(object):
             self.deconv_2 = self.conv2d_transpose(inputs=self.deconv_1, num_inputs=self.feature[0], num_outputs=self.channel, output_shape=tf.shape(self.x_img), kernel_size=self.k_size, stride=2, padding='SAME', activation='sigmoid')
 
             self.recon[t] = self.deconv_2
+            tf.summary.image("seq-%03d" %(t), self.deconv_2)
 
             self.share_parameters = True
 
@@ -105,7 +108,7 @@ class DRAW(object):
         # Reconstruction error: Negative log probability.
         # L^x = -log D(x|c_T) // original loss
         # The loss function newly defined with Euclidean distance
-        self.loss_recon = tf.reduce_sum(tf.square(self.deconv_2 - self.x_img))
+        self.loss_recon = tf.reduce_sum(tf.square(self.recon[-1] - self.x_img))
 
         # Equation 10 & 11.
         # Regularizer: Kullback-Leibler divergence of latent prior.
@@ -132,7 +135,7 @@ class DRAW(object):
     def basic_write(self, hidden_state):
 
         with tf.variable_scope("write", reuse=self.share_parameters):
-            decoded_image_portion = self.fully_connected(hidden_state, self.n_hidden, self.c_h * self.c_w * self.c_c)
+            decoded_image_portion = self.fully_connected(hidden_state, self.n_hidden, self.c_shape)
 
         return decoded_image_portion
 
@@ -160,10 +163,10 @@ class DRAW(object):
 
         wr = tf.matmul(Fyt, tf.matmul(w, Fx))
         wr = tf.transpose(wr, perm=[0, 2, 3, 1])
-        wr = tf.reshape(wr, [-1, self.c_h * self.c_w * self.c_c])
+        wr = tf.reshape(wr, [-1, self.c_shape])
 
         tmpout = wr * tf.reshape(1.0/gamma, [-1, 1])
-        return tf.reshape(tmpout, [-1, self.c_h * self.c_w * self.c_c])
+        return tf.reshape(tmpout, [-1, self.c_shape])
 
     def attn_window(self, scope, h_dec):
 
