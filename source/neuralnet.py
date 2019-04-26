@@ -11,7 +11,7 @@ class DRAW(object):
         self.sequence_length, self.learning_rate = sequence_length, learning_rate
 
         self.attention_n = 5
-        self.n_z = 2
+        self.n_z = 10
         self.share_parameters = False
 
         self.k_size = 3
