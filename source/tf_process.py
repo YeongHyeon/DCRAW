@@ -170,7 +170,7 @@ def validation(sess, neuralnet, saver, dataset, canvas_size):
     loss_recon_tot, loss_kl_tot = [], []
     for iteration in range(iterations):
         x_te, _ = dataset.next_test(canvas_size**2)
-        c_seq_te, loss_recon_te, loss_kl_te = sess.run([neuralnet.c, neuralnet.loss_recon, neuralnet.loss_kl], feed_dict={neuralnet.x:x_te})
+        c_seq_te, loss_recon_te, loss_kl_te = sess.run([neuralnet.recon, neuralnet.loss_recon, neuralnet.loss_kl], feed_dict={neuralnet.x:x_te})
         save_result(c_seq=c_seq_te, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=iteration, savedir="recon_te_final")
         loss_recon_tot.append(loss_recon_te)
         loss_kl_tot.append(loss_kl_te)
