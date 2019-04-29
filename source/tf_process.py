@@ -29,7 +29,7 @@ def make_canvas(images, size):
 
 def save_result_noseq(c_seq, height, width, canvas_size, step, savedir="recon"):
 
-    # c_seq = 1.0/(1.0+np.exp(-np.array(c_seq)))
+    c_seq = 1.0/(1.0+np.exp(-np.array(c_seq)))
 
     tmp_sequence = np.reshape(c_seq, [-1, height, width])
     canvas = make_canvas(tmp_sequence, [canvas_size, canvas_size])
@@ -146,7 +146,7 @@ def training(sess, neuralnet, saver, dataset, epochs, batch_size, canvas_size, s
             train_writer.add_summary(summaries, iteration+(epoch*iterations))
 
             loss_recon_tr, loss_kl_tr, _ = sess.run([neuralnet.loss_recon, neuralnet.loss_kl, neuralnet.optimizer], feed_dict={neuralnet.x:x_tr})
-            # print("   [%d/%d] TR Loss - Recon: %.5f  KL: %.5f" % (iteration, iterations, loss_recon_tr, loss_kl_tr))
+            print("   [%d/%d] TR Loss - Recon: %.5f  KL: %.5f" % (iteration, iterations, loss_recon_tr, loss_kl_tr))
             if(math.isnan(loss_recon_tr) or math.isnan(loss_kl_tr)):
                 not_nan = False
                 break
