@@ -19,6 +19,8 @@ class DRAW(object):
 
         self.c = [0] * self.sequence_length
         self.recon = [0] * self.sequence_length
+        self.enc_feat = [0] * self.sequence_length
+        self.dec_feat = [0] * self.sequence_length
 
         self.mu, self.sigma = [0] * self.sequence_length, [0] * self.sequence_length
 
@@ -42,10 +44,9 @@ class DRAW(object):
             tmp_input = self.x_img - prev_input
             self.enconv_1, self.enc1_h, self.enc1_w, self.enc1_c, self.enc1_hwc = self.conv2d(inputs=tmp_input, num_inputs=self.channel, num_outputs=self.feature[0], kernel_size=self.k_size, stride=2, padding='SAME', activation='sigmoid')
             self.enconv_2, self.enc2_h, self.enc2_w, self.enc2_c, self.enc2_hwc = self.conv2d(inputs=self.enconv_1, num_inputs=self.feature[0], num_outputs=self.feature[1], kernel_size=self.k_size, stride=2, padding='SAME', activation='sigmoid')
+            self.enc_feat[t] = self.enconv_2
 
-            self.c_shape = self.enc2_hwc
-            self.c_h, self.c_w, self.c_c = self.enc2_h, self.enc2_w, self.enc2_c
-
+            self.c_h, self.c_w, self.c_c, self.c_shape = self.enc2_h, self.enc2_w, self.enc2_c, self.enc2_hwc
             self.conv_enc_flat = tf.reshape(self.enconv_2, [-1, self.c_shape])
 
             # Equation 3.
@@ -79,9 +80,8 @@ class DRAW(object):
             self.h_prev_dec = h_t_dec
 
             self.conv_dec_img = tf.reshape(self.c[t], [-1, self.c_h, self.c_w, self.c_c])
-
-            self.concat_dec = self.conv_dec_img #+ self.enconv_2
-            self.deconv_1 = self.conv2d_transpose(inputs=self.concat_dec, num_inputs=self.feature[1], num_outputs=self.feature[0], output_shape=tf.shape(self.enconv_1), kernel_size=self.k_size, stride=2, padding='SAME', activation='sigmoid')
+            self.dec_feat[t] = self.conv_dec_img
+            self.deconv_1 = self.conv2d_transpose(inputs=self.dec_feat[t], num_inputs=self.feature[1], num_outputs=self.feature[0], output_shape=tf.shape(self.enconv_1), kernel_size=self.k_size, stride=2, padding='SAME', activation='sigmoid')
             self.deconv_2 = self.conv2d_transpose(inputs=self.deconv_1, num_inputs=self.feature[0], num_outputs=self.channel, output_shape=tf.shape(self.x_img), kernel_size=self.k_size, stride=2, padding='SAME', activation='sigmoid')
 
             self.recon[t] = self.deconv_2

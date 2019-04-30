@@ -27,22 +27,29 @@ def make_canvas(images, size):
 
     return canvas
 
-def save_result_noseq(c_seq, height, width, canvas_size, step, savedir="recon"):
+def save_feature(feature, step, savedir=""):
 
-    c_seq = 1.0/(1.0+np.exp(-np.array(c_seq)))
+    reshaped_data = np.transpose(np.asarray(feature), (0, 3, 1, 2))
 
-    tmp_sequence = np.reshape(c_seq, [-1, height, width])
-    canvas = make_canvas(tmp_sequence, [canvas_size, canvas_size])
-    save_image(os.path.join("%s" %(savedir), "%06d_seq.png" %(step)), canvas)
+    num_seq = reshaped_data.shape[0]
+    num_feature = reshaped_data.shape[1]
+    for s in range(num_seq):
+        canvas = make_canvas(reshaped_data[s], [int(np.sqrt(num_feature)), int(np.sqrt(num_feature))])
+        save_image(os.path.join("%s" %(savedir), "%06d_feat_seq%03d.png" %(step, s)), canvas)
 
-def save_result(c_seq, height, width, canvas_size, step, savedir="recon"):
+def save_result_noseq(data, height, width, canvas_size, step, savedir=""):
 
-    c_seq = 1.0/(1.0+np.exp(-np.array(c_seq)))
+    reshaped_data = np.reshape(np.asarray(data), [-1, height, width]) # squeeze channel dimension
+    canvas = make_canvas(reshaped_data, [canvas_size, canvas_size])
+    save_image(os.path.join("%s" %(savedir), "%06d.png" %(step)), canvas)
 
-    for cs_iter in range(c_seq.shape[0]):
-        tmp_sequence = np.reshape(c_seq[cs_iter], [-1, height, width])
-        canvas = make_canvas(tmp_sequence, [canvas_size, canvas_size])
-        save_image(os.path.join("%s" %(savedir), "%06d_seq%03d.png" %(step, cs_iter)), canvas)
+def save_result(seq, height, width, canvas_size, step, savedir=""):
+
+    seq = np.asarray(seq)
+    for s in range(seq.shape[0]):
+        reshaped_data = np.reshape(seq[s], [-1, height, width]) # squeeze channel dimension
+        canvas = make_canvas(reshaped_data, [canvas_size, canvas_size])
+        save_image(os.path.join("%s" %(savedir), "%06d_seq%03d.png" %(step, s)), canvas)
 
 def save_recon_loss(recon_tr, recon_te):
 
@@ -112,6 +119,8 @@ def training(sess, neuralnet, saver, dataset, epochs, batch_size, canvas_size, s
     make_dir(path="recon_tr")
     make_dir(path="recon_te_gt")
     make_dir(path="recon_te")
+    make_dir(path="enc_tr")
+    make_dir(path="dec_tr")
 
     x_tr_static, _ = dataset.next_train(canvas_size**2)
     x_te_static, _ = dataset.next_test(canvas_size**2)
@@ -123,8 +132,8 @@ def training(sess, neuralnet, saver, dataset, epochs, batch_size, canvas_size, s
     for epoch in range(epochs+1):
         if((epoch % print_step == 0) or (epoch == (epochs))):
 
-            c_seq_tr, loss_recon_tr, loss_kl_tr = sess.run([neuralnet.recon, neuralnet.loss_recon, neuralnet.loss_kl], feed_dict={neuralnet.x:x_tr_static})
-            c_seq_te, loss_recon_te, loss_kl_te = sess.run([neuralnet.recon, neuralnet.loss_recon, neuralnet.loss_kl], feed_dict={neuralnet.x:x_te_static})
+            seq_tr, loss_recon_tr, loss_kl_tr = sess.run([neuralnet.recon, neuralnet.loss_recon, neuralnet.loss_kl], feed_dict={neuralnet.x:x_tr_static})
+            seq_te, loss_recon_te, loss_kl_te = sess.run([neuralnet.recon, neuralnet.loss_recon, neuralnet.loss_kl], feed_dict={neuralnet.x:x_te_static})
 
             list_recon_tr.append(loss_recon_tr)
             list_recon_te.append(loss_recon_te)
@@ -134,10 +143,15 @@ def training(sess, neuralnet, saver, dataset, epochs, batch_size, canvas_size, s
             print("Epoch %06d (%d iteration)\nTR Loss - Recon: %.5f  KL: %.5f" % (epoch, iterations*epoch, loss_recon_tr, loss_kl_tr))
             print("TE Loss - Recon: %.5f  KL: %.5f" % (loss_recon_te, loss_kl_te))
 
-            save_result_noseq(c_seq=x_tr_static, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=epoch, savedir="recon_tr_gt")
-            save_result(c_seq=c_seq_tr, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=epoch, savedir="recon_tr")
-            save_result_noseq(c_seq=x_te_static, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=epoch, savedir="recon_te_gt")
-            save_result(c_seq=c_seq_te, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=epoch, savedir="recon_te")
+            save_result_noseq(data=x_tr_static, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=epoch, savedir="recon_tr_gt")
+            save_result(seq=seq_tr, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=epoch, savedir="recon_tr")
+            save_result_noseq(data=x_te_static, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=epoch, savedir="recon_te_gt")
+            save_result(seq=seq_te, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=epoch, savedir="recon_te")
+
+            enc_feature, dec_feature = sess.run([neuralnet.enc_feat, neuralnet.dec_feat], feed_dict={neuralnet.x:x_tr_static})
+            enc_feature, dec_feature = np.asarray(enc_feature), np.asarray(dec_feature)
+            save_feature(feature=enc_feature[:, 0, :, :, :], step=epoch, savedir="enc_tr")
+            save_feature(feature=dec_feature[:, 0, :, :, :], step=epoch, savedir="dec_tr")
 
         for iteration in range(iterations):
             x_tr, _ = dataset.next_train(batch_size)
@@ -146,7 +160,7 @@ def training(sess, neuralnet, saver, dataset, epochs, batch_size, canvas_size, s
             train_writer.add_summary(summaries, iteration+(epoch*iterations))
 
             loss_recon_tr, loss_kl_tr, _ = sess.run([neuralnet.loss_recon, neuralnet.loss_kl, neuralnet.optimizer], feed_dict={neuralnet.x:x_tr})
-            print("   [%d/%d] TR Loss - Recon: %.5f  KL: %.5f" % (iteration, iterations, loss_recon_tr, loss_kl_tr))
+            # print("   [%d/%d] TR Loss - Recon: %.5f  KL: %.5f" % (iteration, iterations, loss_recon_tr, loss_kl_tr))
             if(math.isnan(loss_recon_tr) or math.isnan(loss_kl_tr)):
                 not_nan = False
                 break
@@ -165,15 +179,22 @@ def validation(sess, neuralnet, saver, dataset, canvas_size):
         saver.restore(sess, PACK_PATH+"/Checkpoint/model_checker")
 
     make_dir(path="recon_te_final")
+    make_dir(path="enc_te_final")
+    make_dir(path="dec_te_final")
 
     iterations = int(dataset.num_tr/canvas_size**2)
     loss_recon_tot, loss_kl_tot = [], []
     for iteration in range(iterations):
         x_te, _ = dataset.next_test(canvas_size**2)
-        c_seq_te, loss_recon_te, loss_kl_te = sess.run([neuralnet.recon, neuralnet.loss_recon, neuralnet.loss_kl], feed_dict={neuralnet.x:x_te})
-        save_result(c_seq=c_seq_te, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=iteration, savedir="recon_te_final")
+        seq_te, loss_recon_te, loss_kl_te = sess.run([neuralnet.recon, neuralnet.loss_recon, neuralnet.loss_kl], feed_dict={neuralnet.x:x_te})
+        save_result(seq=seq_te, height=dataset.height, width=dataset.width, canvas_size=canvas_size, step=iteration, savedir="recon_te_final")
         loss_recon_tot.append(loss_recon_te)
         loss_kl_tot.append(loss_kl_te)
+
+        enc_feature, dec_feature = sess.run([neuralnet.enc_feat, neuralnet.dec_feat], feed_dict={neuralnet.x:x_te})
+        enc_feature, dec_feature = np.asarray(enc_feature), np.asarray(dec_feature)
+        save_feature(feature=enc_feature[:, 0, :, :, :], step=iteration, savedir="enc_te_final")
+        save_feature(feature=dec_feature[:, 0, :, :, :], step=iteration, savedir="dec_te_final")
 
     loss_recon_tot = np.asarray(loss_recon_tot)
     loss_kl_tot = np.asarray(loss_kl_tot)
